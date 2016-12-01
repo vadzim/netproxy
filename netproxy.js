@@ -2,6 +2,8 @@
 
 const net = require( "net" )
 const fs = require( "fs" )
+const os = require( "os" )
+const path = require( "path" )
 const url = require( "url" )
 const lodash = require( "lodash" )
 const stream = require( "stream" )
@@ -10,7 +12,33 @@ const defaultPorts = require( "./defaultPorts" )
 
 Promise.coroutine.addYieldHandler( Promise.resolve )
 
-const config = JSON.parse( process.argv[ process.argv.length - 1 ] )
+const readConfig = p => {
+	let c
+	try {
+		c = fs.readFileSync( path.join( p, `.netproxyrc` ) )
+	}
+	catch ( e ) {
+		return undefined
+	}
+	return JSON.parse( String( c ).trim() )
+}
+
+const config = function () {
+	if ( process.argv.length < 3 ) {
+		for ( let q, p = process.cwd(); q !== p; q = p, p = path.resolve( p, `..` ) ) {
+			const c = readConfig( p )
+			if ( c !== undefined )
+				return c
+		}
+		const c = readConfig( path.join( os.homedir() ) )
+		if ( c !== undefined )
+			return c
+	}
+	const c = {}
+	for ( let i = 2; i < process.argv.length; i += 2 )
+		c[ process.argv[ i ] ] = process.argv[ i + 1 ]
+	return c
+}()
 
 const parse = str =>
 	/^\d+$/.test( str )
