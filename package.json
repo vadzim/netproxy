@@ -1,0 +1,16 @@
+{
+  "name": "netproxy",
+  "version": "1.0.0",
+  "description": "proxy for tcp/ip etc.",
+  "main": "netproxy.js",
+  "repository": {
+    "url": "https://github.com/vadzim/netproxy.git",
+    "type": "git"
+  },
+  "author": "v@vadzim.info",
+  "license": "MIT",
+  "dependencies": {
+    "bluebird": "^3.4.6",
+    "lodash": "^4.17.2"
+  }
+}
