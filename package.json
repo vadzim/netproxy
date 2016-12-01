@@ -12,5 +12,8 @@
   "dependencies": {
     "bluebird": "^3.4.6",
     "lodash": "^4.17.2"
+  },
+  "bin": {
+    "netproxy": "./netproxy.js"
   }
 }
