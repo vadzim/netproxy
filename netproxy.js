@@ -53,25 +53,37 @@ const parseMultiPorts = str =>
 	? str.match( /\d+/g ).map( parse )
 	: [ parse( str ) ]
 
+function initStreamPromise( stream ) {
+	if ( stream.promise )
+		throw new Error( `stream is already initialized` )
+	stream.promise = new Promise( resolve => stream
+		.on( `error`, error => resolve( Promise.reject( error ) ) )
+		.on( `end`, () => resolve() )
+	)
+	return stream
+}
+
+function streamToPromise( stream ) {
+	if ( !stream.promise )
+		throw new Error( `A stream must be initialized by a promise immediatly after construction to avoid leaks` )
+	return stream.promise
+}
+
 function connect( udest ) {
 	switch ( udest.protocol ) {
 		case `tcp:`: {
 			return new Promise( resolve => {
 				const ret = net.connect( udest.port, udest.hostname, () => resolve( ret ) )
+				initStreamPromise( ret )
 				ret.on( `error`, error => resolve( Promise.reject( error ) ) )
 			} )
 			break
 		}
 		default: {
-			console.error( `Unsupported protocol: ${ url.format( udest ) }` )	
+			console.error( new Date, `Unsupported protocol: ${ url.format( udest ) }` )	
 		}
 	}
 }
-
-const pstream = stream => new Promise( resolve => {
-	stream.on( `error`, error => resolve( Promise.reject( error ) ) )
-	stream.on( `end`, () => resolve() )
-} )
 
 const pipe = Promise.coroutine( function* ( source, dest ) {
 	try {
@@ -80,7 +92,7 @@ const pipe = Promise.coroutine( function* ( source, dest ) {
 			try {
 				dest.pipe( source )
 				source.pipe( dest )
-				yield Promise.all( [ pstream( source ), pstream( dest ) ] )
+				yield Promise.all( [ streamToPromise( source ), streamToPromise( dest ) ] )
 			}
 			finally {
 				dest.end()
@@ -93,7 +105,7 @@ const pipe = Promise.coroutine( function* ( source, dest ) {
 } )
 
 for ( const [ source, dest ] of Object.entries( config ) ) {
-	const onError = error => console.error( error )
+	const onError = error => console.error( new Date, error )
 	const usource = parseMultiPorts( source )
 	const udest = parse( dest )
 
@@ -112,13 +124,13 @@ for ( const [ source, dest ] of Object.entries( config ) ) {
 			d = Object.assign( {}, d, { port: s.port } )
 		switch ( s.protocol ) {
 			case `tcp:`: {
-				net.createServer( sourceSocket => pipe( sourceSocket, connect( d ) ).catch( onError ) )
-				.on( `error`, onError )
-				.listen( s.port )
+				net.createServer(
+					sourceSocket => pipe( initStreamPromise( sourceSocket ), connect( d ) ).catch( onError )
+				).on( `error`, onError ).listen( s.port )
 				break
 			}
 			default: {
-				console.error( `Unsupported protocol: ${ url.format( s ) }` )
+				console.error( new Date, `Unsupported protocol: ${ url.format( s ) }` )
 			}
 		}
 		console.log( `${ url.format( s ) } -> ${ url.format( d ) }` )
