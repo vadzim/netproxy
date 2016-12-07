@@ -80,8 +80,7 @@ const pipe = Promise.coroutine( function* ( source, dest ) {
 			try {
 				dest.pipe( source )
 				source.pipe( dest )
-				yield pstream( source )
-				yield pstream( dest )
+				yield Promise.all( [ pstream( source ), pstream( dest ) ] )
 			}
 			finally {
 				dest.end()
