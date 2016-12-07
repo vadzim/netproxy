@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+require( "core-js" )
 const net = require( "net" )
 const fs = require( "fs" )
 const os = require( "os" )
@@ -47,6 +48,11 @@ const parse = str =>
 	? parse( `tcp://${ str }` )
 	: lodash.pick( url.parse( str ), [ `protocol`, `slashes`, `auth`, `hostname`, `port`, `pathname`, `search`, `hash` ] )
 
+const parseMultiPorts = str =>
+	/(\d+\,)+\d+/.test( str )
+	? str.match( /\d+/g ).map( parse )
+	: [ parse( str ) ]
+
 function connect( udest ) {
 	switch ( udest.protocol ) {
 		case `tcp:`: {
@@ -89,9 +95,10 @@ const pipe = Promise.coroutine( function* ( source, dest ) {
 
 for ( const [ source, dest ] of Object.entries( config ) ) {
 	const onError = error => console.error( error )
-	const usource = parse( source )
+	const usource = parseMultiPorts( source )
 	const udest = parse( dest )
-	for ( const u of [ usource, udest ] ) {
+
+	for ( const u of [ ...usource, udest ] ) {
 		if ( u.port == null && u.protocol )
 			u.port = defaultPorts[ u.protocol ]
 		if ( u.port )
@@ -99,18 +106,22 @@ for ( const [ source, dest ] of Object.entries( config ) ) {
 		if ( u.protocol === `tcpip:` )
 			u.protocol = `tcp:`
 	}
-	if ( udest.port == null && udest.protocol === `tcp:` )
-		udest.port = usource.port
-	switch ( usource.protocol ) {
-		case `tcp:`: {
-			net.createServer( sourceSocket => pipe( sourceSocket, connect( udest ) ).catch( onError ) )
-			.on( `error`, onError )
-			.listen( usource.port )
-			break
+
+	for ( const s of usource ) {
+		let d = udest
+		if ( d.port == null && d.protocol === `tcp:` )
+			d = Object.assign( {}, d, { port: s.port } )
+		switch ( s.protocol ) {
+			case `tcp:`: {
+				net.createServer( sourceSocket => pipe( sourceSocket, connect( d ) ).catch( onError ) )
+				.on( `error`, onError )
+				.listen( s.port )
+				break
+			}
+			default: {
+				console.error( `Unsupported protocol: ${ url.format( s ) }` )
+			}
 		}
-		default: {
-			console.error( `Unsupported protocol: ${ url.format( usource ) }` )
-		}
+		console.log( `${ url.format( s ) } -> ${ url.format( d ) }` )
 	}
-	console.log( `${ url.format( usource ) } -> ${ url.format( udest ) }` )
 }
