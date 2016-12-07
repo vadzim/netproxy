@@ -1,4 +1,5 @@
 - webpack
+- make `pstream` working on closed streams to automatically avoid leaks like 1.0.3
 
 1.0.3
 fix memory leaks
