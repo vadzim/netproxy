@@ -5,6 +5,10 @@
 - parsing command line args
 - help
 
+1.2.0
+- multiple destinations delimited with comma
+- logging each connection
+
 1.1.0
 - more against leaks
 
