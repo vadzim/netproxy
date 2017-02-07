@@ -53,6 +53,9 @@ const parseMultiPorts = str =>
 	? str.match( /\d+/g ).map( parse )
 	: [ parse( str ) ]
 
+const parseMultiDest = str =>
+	str.match( /[^,]+/g ).map( parse )
+
 function initStreamPromise( stream ) {
 	if ( stream.promise )
 		throw new Error( `stream is already initialized` )
@@ -74,6 +77,7 @@ function connect( udest ) {
 		case `tcp:`: {
 			return new Promise( resolve => {
 				const ret = net.connect( udest.port, udest.hostname, () => resolve( ret ) )
+				ret.url = udest
 				initStreamPromise( ret )
 				ret.on( `error`, error => resolve( Promise.reject( error ) ) )
 			} )
@@ -85,11 +89,23 @@ function connect( udest ) {
 	}
 }
 
+function closeStream( s ) {
+	s.end()
+}
+
+function connectAny( dest ) {
+	return new Promise( resolve => dest.map( connect ).map( ps => ps.then( s => {
+		resolve( s )
+		resolve = closeStream
+	} ) ) )
+}
+
 const pipe = Promise.coroutine( function* ( source, dest ) {
 	try {
 		dest = yield dest
 		if ( dest ) {
 			try {
+				console.log(`${ url.format( source.url ) } -> ${ url.format( dest.url ) }`)
 				dest.pipe( source )
 				source.pipe( dest )
 				yield Promise.all( [ streamToPromise( source ), streamToPromise( dest ) ] )
@@ -104,12 +120,12 @@ const pipe = Promise.coroutine( function* ( source, dest ) {
 	}
 } )
 
-for ( const [ source, dest ] of Object.entries( config ) ) {
+for ( const [ csource, cdest ] of Object.entries( config ) ) {
 	const onError = error => console.error( new Date, error )
-	const usource = parseMultiPorts( source )
-	const udest = parse( dest )
+	const usource = parseMultiPorts( csource )
+	const udest = parseMultiDest( cdest )
 
-	for ( const u of [ ...usource, udest ] ) {
+	for ( const u of [ ...usource, ...udest ] ) {
 		if ( u.port == null && u.protocol )
 			u.port = defaultPorts[ u.protocol ]
 		if ( u.port )
@@ -119,13 +135,14 @@ for ( const [ source, dest ] of Object.entries( config ) ) {
 	}
 
 	for ( const s of usource ) {
-		let d = udest
-		if ( d.port == null && d.protocol === `tcp:` )
-			d = Object.assign( {}, d, { port: s.port } )
+		const dest = udest.map(d => d.port == null && d.protocol === `tcp:` ? Object.assign( {}, d, { port: s.port } ) : d)
 		switch ( s.protocol ) {
 			case `tcp:`: {
 				net.createServer(
-					sourceSocket => pipe( initStreamPromise( sourceSocket ), connect( d ) ).catch( onError )
+					sourceSocket => {
+						sourceSocket.url = s
+						pipe( initStreamPromise( sourceSocket ), connectAny( dest ) ).catch( onError )
+					}
 				).on( `error`, onError ).listen( s.port )
 				break
 			}
@@ -133,6 +150,6 @@ for ( const [ source, dest ] of Object.entries( config ) ) {
 				console.error( new Date, `Unsupported protocol: ${ url.format( s ) }` )
 			}
 		}
-		console.log( `${ url.format( s ) } -> ${ url.format( d ) }` )
+		console.log( `config: ${ url.format( s ) } -> ${ dest.map( d => url.format( d ) ) }` )
 	}
 }
