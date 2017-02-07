@@ -84,7 +84,7 @@ function connect( udest ) {
 			break
 		}
 		default: {
-			console.error( new Date, `Unsupported protocol: ${ url.format( udest ) }` )	
+			return Promise.reject( new Error( `Unsupported protocol: ${ url.format( udest ) }` ) )
 		}
 	}
 }
@@ -94,9 +94,16 @@ function closeStream( s ) {
 }
 
 function connectAny( dest ) {
+	const errors = []
 	return new Promise( resolve => dest.map( connect ).map( ps => ps.then( s => {
 		resolve( s )
 		resolve = closeStream
+	} ).catch( e => {
+		errors.push( e )
+		e.errors = errors
+		if ( errors.length === dest.length ) {
+			resolve( Promise.reject( errors[ 0 ] ) )
+		}
 	} ) ) )
 }
 
